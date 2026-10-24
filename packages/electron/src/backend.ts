@@ -644,12 +644,23 @@ export class Backend {
   }
 
   closeUnprotectedWhenIdle(): Effect.Effect<void, BackendFailure> {
-    return Effect.gen({self: this}, function* () {
+    return Effect.suspend((): Effect.Effect<void, BackendFailure> => {
+      if (this.owned.lifecycle !== 'open') {
+        return Effect.fail(
+          new ActionError(
+            'BUSY',
+            'A protected lifecycle operation is already running. Try again when it finishes.'
+          )
+        );
+      }
+
       this.owned.lifecycle = 'unprotected';
-      yield* Effect.ensuring(
+      return Effect.ensuring(
         this.drain().pipe(Effect.andThen(Effect.sync(() => this.closeUnprotected()))),
         Effect.sync(() => {
-          this.owned.lifecycle = 'open';
+          if (this.owned.lifecycle === 'unprotected') {
+            this.owned.lifecycle = 'open';
+          }
         })
       );
     });
